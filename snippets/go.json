@@ -1,0 +1,56 @@
+{
+    "service": {
+        "prefix": "svc",
+        "description": "Create a service interface a builder and a struct",
+        "body": [
+            "type $1Service interface {",
+            "",
+            "}",
+            "",
+            "type service struct {",
+            "   storage *$1Storage",
+            "}",
+            "",
+            "func New$1Service(storage *$1Storage) $1Service {",
+            "   return &service{storage: storage}",
+            "}"
+        ],
+        "scope": "go"
+    },
+    "storage": {
+        "prefix": "strg",
+        "description": "Create a storage interface a builder and a struct",
+        "body": [
+            "type $1Storage interface {",
+            "",
+            "}",
+            "",
+            "type storage struct {",
+            "   client $0db.Client",
+            "}",
+            "",
+            "func New$1Storage(client db.Client) $1Storage {",
+            "   return &storage{client: client}",
+            "}"
+        ],
+        "scope": "go"
+    },
+    "handlefunc": {
+        "prefix": "hdf",
+        "description": "Create a handlefunc interface a builder and a struct",
+        "body": [
+            "type $1HandleFunc interface {",
+            "",
+            "}",
+            "",
+            "type handleFunc struct {",
+            "   service $0service.$1Service",
+            "}",
+            "",
+            "func New$1HandleFunc(service service.$1Service) $1HandleFunc {",
+            "   return &handleFunc{service: service}",
+            "}"
+        ],
+        "scope": "go"
+    }
+}
