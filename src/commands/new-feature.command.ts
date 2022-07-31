@@ -1,6 +1,7 @@
 import * as _ from "lodash";
 import * as changeCase from "change-case";
 import * as mkdirp from "mkdirp";
+import cp = require('child_process');
 
 import {
   InputBoxOptions,
@@ -10,15 +11,10 @@ import {
   workspace,
 } from "vscode";
 import { existsSync, lstatSync, writeFile } from "fs";
-import {
-  getBlocEventTemplate,
-  getBlocStateTemplate,
-  getBlocTemplate,
-} from "../templates";
-import { getBlocType, BlocType, TemplateType } from "../utils";
+import * as templates from "../templates";
 
-export const newBloc = async (uri: Uri) => {
-  const featureName = await promptForBlocName();
+export const newFeature = async (uri: Uri) => {
+  const featureName = await promptForFeatureName();
   if (_.isNil(featureName) || featureName.trim() === "") {
     window.showErrorMessage("The feature name must not be empty");
     return;
@@ -35,12 +31,11 @@ export const newBloc = async (uri: Uri) => {
     targetDirectory = uri.fsPath;
   }
 
-  const blocType = await getBlocType(TemplateType.Bloc);
-  const pascalCaseBlocName = changeCase.pascalCase(featureName);
+  const pascalCaseFeatureName = changeCase.pascalCase(featureName);
   try {
-    await generateBlocCode(featureName, targetDirectory, blocType);
+    await generateFeatureCode(featureName, targetDirectory);
     window.showInformationMessage(
-      `Successfully Generated ${pascalCaseBlocName} Bloc`
+      `Successfully Generated ${pascalCaseFeatureName} Feature`
     );
   } catch (error) {
     window.showErrorMessage(
@@ -50,12 +45,12 @@ export const newBloc = async (uri: Uri) => {
   }
 };
 
-function promptForBlocName(): Thenable<string | undefined> {
-  const blocNamePromptOptions: InputBoxOptions = {
+function promptForFeatureName(): Thenable<string | undefined> {
+  const featureNamePromptOptions: InputBoxOptions = {
     prompt: "Feature Name",
     placeHolder: "feature_name",
   };
-  return window.showInputBox(blocNamePromptOptions);
+  return window.showInputBox(featureNamePromptOptions);
 }
 
 async function promptForTargetDirectory(): Promise<string | undefined> {
@@ -73,108 +68,104 @@ async function promptForTargetDirectory(): Promise<string | undefined> {
   });
 }
 
-async function generateBlocCode(
-  blocName: string,
+async function generateFeatureCode(
+  featureName: string,
   targetDirectory: string,
-  type: BlocType
 ) {
-  const shouldCreateDirectory = workspace
-    .getConfiguration("bloc")
-    .get<boolean>("newBlocTemplate.createDirectory");
-  const blocDirectoryPath = shouldCreateDirectory
-    ? `${targetDirectory}/bloc`
-    : targetDirectory;
-  if (!existsSync(blocDirectoryPath)) {
-    await createDirectory(blocDirectoryPath);
-  }
+  const featureDirectoryPath = `${targetDirectory}/${featureName}`;
+  const pascalCaseFeatureName = changeCase.pascalCase(featureName);
+  const folder = workspace.getWorkspaceFolder(Uri.file(featureDirectoryPath));
+  let modName: string | null = null;
+  const promise = new Promise<void>((resolve, reject) => {
+    cp.exec(`cd ${folder?.uri.fsPath} && go mod edit -json | python3 -c "import sys, json; print(json.load(sys.stdin)['Module']['Path'])"`, (err, stdout, _) => {
+      if (err) {
+        console.log('Error reading go.mod: ' + err);
+        window.showWarningMessage('Error reading go.mod: ' + err + ' (not a big problem, maybe python3 is not installed.)');
+        reject(err);
+        return
+      }
+      modName = stdout.trim();
+      resolve();
+    })
+  },
+  );
 
-  await Promise.all([
-    createBlocEventTemplate(blocName, blocDirectoryPath, type),
-    createBlocStateTemplate(blocName, blocDirectoryPath, type),
-    createBlocTemplate(blocName, blocDirectoryPath, type),
-  ]);
+  await promise;
+  
+  await createDirectory(featureDirectoryPath);
+
+  await createByTemplate(featureDirectoryPath, "db", templates.dbTemplate(pascalCaseFeatureName));
+  await createByTemplate(featureDirectoryPath, "handlefunc", templates.handleFuncTemplate(pascalCaseFeatureName, modName));
+  await createByTemplate(featureDirectoryPath, "init", templates.initTemplate(pascalCaseFeatureName, modName));
+  await createByTemplate(featureDirectoryPath, "service", templates.serviceTemplate(pascalCaseFeatureName, modName));
+  await createByTemplate(featureDirectoryPath, "model", templates.modelTemplate());
 }
 
 function createDirectory(targetDirectory: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    mkdirp(targetDirectory, (error) => {
+    if (!existsSync(targetDirectory)) {
+      mkdirp(targetDirectory, (error) => {
+        if (error) {
+          return reject(error);
+        }
+      });
+    }
+    if (!existsSync(targetDirectory + '/handlefunc')) {
+      mkdirp(targetDirectory + '/handlefunc', (error) => {
+        if (error) {
+          return reject(error);
+        }
+      })
+    }
+    if (!existsSync(targetDirectory + '/init')) {
+      mkdirp(targetDirectory + '/init', (error) => {
+        if (error) {
+          return reject(error);
+        }
+      })
+    }
+    if (!existsSync(targetDirectory + '/service')) {
+      mkdirp(targetDirectory + '/service', (error) => {
+        if (error) {
+          return reject(error);
+        }
+      })
+    }
+    if (!existsSync(targetDirectory + '/db')) {
+      mkdirp(targetDirectory + '/db', (error) => {
+        if (error) {
+          return reject(error);
+        }
+      })
+    }
+    if (!existsSync(targetDirectory + '/model')) {
+      mkdirp(targetDirectory + '/model', (error) => {
+        if (error) {
+          return reject(error);
+        }
+        return resolve();
+      })
+    }
+  });
+}
+
+function createByTemplate(
+  targetDirectory: string,
+  pkg: string,
+  template: string,
+) {
+  const targetPath = `${targetDirectory}/${pkg}/${pkg}.go`;
+  if (existsSync(targetPath)) {
+    throw Error(`${targetPath} already exists`);
+  }
+
+  return new Promise<void>(async (resolve, reject) => {
+    writeFile(targetPath, template, "utf8", (error) => {
       if (error) {
         return reject(error);
       }
-      resolve();
+      return resolve();
     });
-  });
-}
-
-function createBlocEventTemplate(
-  blocName: string,
-  targetDirectory: string,
-  type: BlocType
-) {
-  const snakeCaseBlocName = changeCase.snakeCase(blocName);
-  const targetPath = `${targetDirectory}/${snakeCaseBlocName}_event.dart`;
-  if (existsSync(targetPath)) {
-    throw Error(`${snakeCaseBlocName}_event.dart already exists`);
   }
-  return new Promise<void>(async (resolve, reject) => {
-    writeFile(
-      targetPath,
-      getBlocEventTemplate(blocName, type),
-      "utf8",
-      (error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve();
-      }
-    );
-  });
-}
-
-function createBlocStateTemplate(
-  blocName: string,
-  targetDirectory: string,
-  type: BlocType
-) {
-  const snakeCaseBlocName = changeCase.snakeCase(blocName);
-  const targetPath = `${targetDirectory}/${snakeCaseBlocName}_state.dart`;
-  if (existsSync(targetPath)) {
-    throw Error(`${snakeCaseBlocName}_state.dart already exists`);
-  }
-  return new Promise<void>(async (resolve, reject) => {
-    writeFile(
-      targetPath,
-      getBlocStateTemplate(blocName, type),
-      "utf8",
-      (error) => {
-        if (error) {
-          reject(error);
-          return;
-        }
-        resolve();
-      }
-    );
-  });
-}
-
-function createBlocTemplate(
-  blocName: string,
-  targetDirectory: string,
-  type: BlocType
-) {
-  const snakeCaseBlocName = changeCase.snakeCase(blocName);
-  const targetPath = `${targetDirectory}/${snakeCaseBlocName}_bloc.dart`;
-  if (existsSync(targetPath)) {
-    throw Error(`${snakeCaseBlocName}_bloc.dart already exists`);
-  }
-  return new Promise<void>(async (resolve, reject) => {
-    writeFile(targetPath, getBlocTemplate(blocName, type), "utf8", (error) => {
-      if (error) {
-        reject(error);
-        return;
-      }
-      resolve();
-    });
-  });
+  );
 }
