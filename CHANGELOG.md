@@ -1,3 +1,8 @@
+# 1.0.1
+
+Fixed changelog and other things.
+
+
 # 1.0.0
 
 Initial Version of the Extension.

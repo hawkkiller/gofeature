@@ -2,7 +2,7 @@
   "name": "gofeature",
   "displayName": "gofeature",
   "description": "Helpful Golang snippets and other things",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "publisher": "MykhailoLazebnyi",
   "repository": {
     "type": "git",
