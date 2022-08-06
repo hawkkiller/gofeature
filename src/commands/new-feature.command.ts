@@ -77,7 +77,8 @@ async function generateFeatureCode(
   const folder = workspace.getWorkspaceFolder(Uri.file(featureDirectoryPath));
   let modName: string | null = null;
   const promise = new Promise<void>((resolve, reject) => {
-    cp.exec(`cd ${folder?.uri.fsPath} && go mod edit -json | python3 -c "import sys, json; print(json.load(sys.stdin)['Module']['Path'])"`, (err, stdout, _) => {
+    window.showInformationMessage(`Searching for go.mod in ${folder?.uri.fsPath}/app`);
+    cp.exec(`cd ${folder?.uri.fsPath}/app && go mod edit -json | python3 -c "import sys, json; print(json.load(sys.stdin)['Module']['Path'])"`, (err, stdout, _) => {
       if (err) {
         console.log('Error reading go.mod: ' + err);
         window.showWarningMessage('Error reading go.mod: ' + err + ' (not a big problem, maybe python3 is not installed.)');
