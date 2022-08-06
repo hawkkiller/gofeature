@@ -2,10 +2,10 @@ import { snakeCase } from "change-case";
 
 const imports = (modName: string | null, featureName: string) => {
     if (modName) {
-        const featureFolder = `${modName}/app/feature/${featureName}`
+        const featureFolder = `${modName}/app/src/feature/${featureName}`
         return `
 import (
-    coreModel "${modName}/app/core/model"
+    coreModel "${modName}/app/src/core/model"
     "log"
     "${featureFolder}/handlefunc"
     "${featureFolder}/service"
